@@ -9,18 +9,24 @@ def fetch_live_green_price():
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            # باز کردن صفحه و منتظر ماندن تا جاوااسکریپت‌ها و جدول‌ها لود شوند
-            page.goto("https://irenex.ir/TradeStatistics/Physical", timeout=60000, wait_until="networkidle")
-            page.wait_for_timeout(5000)
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--ignore-certificate-errors", "--no-sandbox"]
+            )
+            
+            # نادیده گرفتن خطای گواهینامه SSL بورس انرژی در کانتکست مرورگر
+            context = browser.new_context(ignore_https_errors=True)
+            page = context.new_page()
+
+            # بارگذاری صفحه و دادن مهلت برای اجرای جاوااسکریپت و جدول
+            page.goto("https://irenex.ir/TradeStatistics/Physical", timeout=60000, wait_until="load")
+            page.wait_for_timeout(7000)
 
             content = page.content()
             browser.close()
 
-            # جستجوی تابلوی برق سبز در متن رندر شده
+            # بررسی و استخراج قیمت از جدول رندر شده
             if "سبز" in content or "برق" in content:
-                # استخراج اعداد ۵ یا ۶ رقمی مربوط به نرخ ریالی
                 matches = re.findall(r'(\d{2,3}[,\.]\d{3})', content)
                 for m in matches:
                     clean = int(m.replace(",", "").replace(".", ""))
@@ -31,8 +37,11 @@ def fetch_live_green_price():
     except Exception as e:
         print(f"Browser automation failed: {e}")
 
-    if not extracted_price:
-        extracted_price = 110000  # نرخ پیش‌فرض پشتیبان
+    if extracted_price:
+        print(f"SUCCESS: Fetched live market price: {extracted_price}")
+    else:
+        print("NOTICE: Live board not found or market closed. Using standard industrial rate.")
+        extracted_price = 110000
         fetch_status = "fallback"
 
     return extracted_price, fetch_status
