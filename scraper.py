@@ -40,7 +40,7 @@ def fetch_live_green_price():
     # در صورتی که بازار در روزهای تعطیل بسته باشد یا درخواست به سد امنیتی بخورد،
     # از آخرین نرخ معتبر کشف‌شده در تابلوی صنایع (۱۱۰,۰۰۰ ریال) به عنوان مبنا استفاده می‌شود
     if not extracted_price:
-        extracted_price = 120000
+        extracted_price = 110000
 
     return extracted_price
 
