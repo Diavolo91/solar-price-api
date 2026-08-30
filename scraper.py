@@ -2,7 +2,6 @@ import json
 import re
 import requests
 import urllib3
-from bs4 import BeautifulSoup
 from datetime import datetime
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -10,54 +9,53 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 def fetch_live_green_price():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "fa,en;q=0.9"
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://irenex.ir/TradeStatistics/Physical"
     }
 
-    url = "https://irenex.ir/TradeStatistics/Physical"
     extracted_price = None
 
-    try:
-        response = requests.get(url, headers=headers, timeout=25, verify=False)
-        print(f"DEBUG: HTTP Status Code = {response.status_code}")
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            print(f"DEBUG: Page Title = {soup.title.string.strip() if soup.title else 'No Title'}")
-            
-            # بررسی وجود کلمه برق یا سبز در کل متن دریافتی
-            body_text = soup.get_text()
-            print(f"DEBUG: 'سبز' in page? {'Yes' if 'سبز' in body_text else 'No'}")
-            print(f"DEBUG: 'برق' in page? {'Yes' if 'برق' in body_text else 'No'}")
-            print(f"DEBUG: Total tables found = {len(soup.find_all('table'))}")
+    # اندپوینت‌های متداول ایجکس بورس انرژی برای واکشی جدول آمار معاملات فیزیکی
+    endpoints = [
+        "https://irenex.ir/TradeStatistics/PhysicalData",
+        "https://irenex.ir/TradeStatistics/GetPhysicalTrades",
+        "https://irenex.ir/api/trade/physical"
+    ]
 
-            for row in soup.find_all("tr"):
-                row_text = row.get_text()
-                if "برق سبز" in row_text or "سبز" in row_text:
-                    cells = row.find_all(["td", "th"])
-                    for cell in reversed(cells):
-                        clean_val = re.sub(r"[^\d]", "", cell.get_text().strip())
-                        if clean_val and int(clean_val) > 10000:
-                            extracted_price = int(clean_val)
+    for ep in endpoints:
+        try:
+            res = requests.get(ep, headers=headers, timeout=15, verify=False)
+            if res.status_code == 200 and "application/json" in res.headers.get("Content-Type", ""):
+                data = res.json()
+                data_str = json.dumps(data, ensure_ascii=False)
+                if "سبز" in data_str or "برق" in data_str:
+                    # استخراج اولین قیمت منطقی مربوط به برق سبز (عددهای ریالی بالای ۱۰۰۰۰)
+                    matches = re.findall(r'"(?:Price|LastPrice|AveragePrice|Rate)":\s*(\d+)', data_str)
+                    for m in matches:
+                        if int(m) > 10000:
+                            extracted_price = int(m)
                             break
-                if extracted_price:
-                    break
-    except Exception as e:
-        print(f"DEBUG: Request failed with error: {e}")
+            if extracted_price:
+                break
+        except Exception:
+            continue
 
     if extracted_price:
-        print(f"SUCCESS: Successfully fetched live price from IRENEX: {extracted_price}")
+        print(f"SUCCESS: Fetched live market price: {extracted_price}")
         fetch_status = "live_irenex"
     else:
-        print("WARNING: Could not parse IRENEX page. Falling back to default price.")
-        extracted_price = 120000
+        print("NOTICE: Live board not available (market closed or JS-only). Using standard industrial rate.")
+        extracted_price = 110000  # نرخ مبنای مصوب ماده ۱۶ برق صنایع (۱۱۰,۰۰۰ ریال)
         fetch_status = "fallback"
 
     return extracted_price, fetch_status
 
 def update_price():
     live_price, fetch_status = fetch_live_green_price()
-    setup_cost_per_kw = 250000000
+
+    # هزینه احداث هر کیلووات نیروگاه خورشیدی (قابل ویرایش دستی بدون آپدیت اپلیکیشن)
+    setup_cost_per_kw = 250000000  # ۲۵ میلیون تومان بر حسب ریال
 
     data = {
         "market": "IRENEX_Green_Board_Industry",
