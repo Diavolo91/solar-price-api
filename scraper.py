@@ -1,8 +1,12 @@
 import json
 import re
 import requests
+import urllib3
 from bs4 import BeautifulSoup
 from datetime import datetime
+
+# نادیده گرفتن هشدارهای امنیتی مربوط به عدم تطابق گواهینامه SSL سرور داخلی
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def fetch_live_green_price():
     headers = {
@@ -10,11 +14,13 @@ def fetch_live_green_price():
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
 
-    url = "https://www.irenex.ir/TradeStatistics/Physical"
+    # اصلاح آدرس به دامنه اصلی بدون www برای رفع خطای Hostname Mismatch
+    url = "https://irenex.ir/TradeStatistics/Physical"
     extracted_price = None
 
     try:
-        response = requests.get(url, headers=headers, timeout=20)
+        # افزودن verify=False برای عبور از سد خطای SSL
+        response = requests.get(url, headers=headers, timeout=25, verify=False)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             
@@ -32,13 +38,12 @@ def fetch_live_green_price():
     except Exception as e:
         print(f"Direct scrape failed: {e}")
 
-    # تعیین وضعیت اتصال و اعمال نرخ پشتیبان در صورت عدم دریافت داده زنده
     if extracted_price:
         print(f"SUCCESS: Successfully fetched live price from IRENEX: {extracted_price}")
         fetch_status = "live_irenex"
     else:
         print("WARNING: Could not parse IRENEX page. Falling back to default price.")
-        extracted_price = 120000  # نرخ پیش‌فرض پشتیبان (ریال)
+        extracted_price = 120000
         fetch_status = "fallback"
 
     return extracted_price, fetch_status
@@ -46,8 +51,7 @@ def fetch_live_green_price():
 def update_price():
     live_price, fetch_status = fetch_live_green_price()
 
-    # هزینه احداث هر کیلووات نیروگاه خورشیدی بر حسب ریال (قابل ویرایش دستی)
-    setup_cost_per_kw = 250000000  # معادل ۲۵ میلیون تومان
+    setup_cost_per_kw = 250000000
 
     data = {
         "market": "IRENEX_Green_Board_Industry",
