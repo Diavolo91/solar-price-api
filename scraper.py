@@ -5,25 +5,32 @@ import urllib3
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-# نادیده گرفتن هشدارهای امنیتی مربوط به عدم تطابق گواهینامه SSL سرور داخلی
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def fetch_live_green_price():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "fa,en;q=0.9"
     }
 
-    # اصلاح آدرس به دامنه اصلی بدون www برای رفع خطای Hostname Mismatch
     url = "https://irenex.ir/TradeStatistics/Physical"
     extracted_price = None
 
     try:
-        # افزودن verify=False برای عبور از سد خطای SSL
         response = requests.get(url, headers=headers, timeout=25, verify=False)
+        print(f"DEBUG: HTTP Status Code = {response.status_code}")
+        
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
+            print(f"DEBUG: Page Title = {soup.title.string.strip() if soup.title else 'No Title'}")
             
+            # بررسی وجود کلمه برق یا سبز در کل متن دریافتی
+            body_text = soup.get_text()
+            print(f"DEBUG: 'سبز' in page? {'Yes' if 'سبز' in body_text else 'No'}")
+            print(f"DEBUG: 'برق' in page? {'Yes' if 'برق' in body_text else 'No'}")
+            print(f"DEBUG: Total tables found = {len(soup.find_all('table'))}")
+
             for row in soup.find_all("tr"):
                 row_text = row.get_text()
                 if "برق سبز" in row_text or "سبز" in row_text:
@@ -36,7 +43,7 @@ def fetch_live_green_price():
                 if extracted_price:
                     break
     except Exception as e:
-        print(f"Direct scrape failed: {e}")
+        print(f"DEBUG: Request failed with error: {e}")
 
     if extracted_price:
         print(f"SUCCESS: Successfully fetched live price from IRENEX: {extracted_price}")
@@ -50,7 +57,6 @@ def fetch_live_green_price():
 
 def update_price():
     live_price, fetch_status = fetch_live_green_price()
-
     setup_cost_per_kw = 250000000
 
     data = {
