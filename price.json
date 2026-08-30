@@ -1,10 +1,11 @@
 {
   "market": "IRENEX_Green_Board_Industry",
   "regulation": "Article 16 Knowledge-Based Production Leap Law",
-  "price_per_kwh_irr": 110000,
-  "price_per_mwh_irr": 110000000,
-  "unit": "IRR/kWh",
+  "price_per_kwh_irr": 120000,
+  "price_per_mwh_irr": 120000000,
+  "setup_cost_per_kw_irr": 250000000,
+  "unit": "IRR",
   "target_sector": "Industrial (>1MW)",
-  "updated_at": "2026-08-30 19:04:35 UTC",
-  "status": "online"
+  "source_status": "fallback",
+  "updated_at": "2026-08-30 19:10:29 UTC"
 }
