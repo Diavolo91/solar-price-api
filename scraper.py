@@ -1,61 +1,45 @@
 import json
 import re
-import requests
-import urllib3
 from datetime import datetime
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from playwright.sync_api import sync_playwright
 
 def fetch_live_green_price():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://irenex.ir/TradeStatistics/Physical"
-    }
-
     extracted_price = None
+    fetch_status = "fallback"
 
-    # اندپوینت‌های متداول ایجکس بورس انرژی برای واکشی جدول آمار معاملات فیزیکی
-    endpoints = [
-        "https://irenex.ir/TradeStatistics/PhysicalData",
-        "https://irenex.ir/TradeStatistics/GetPhysicalTrades",
-        "https://irenex.ir/api/trade/physical"
-    ]
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            # باز کردن صفحه و منتظر ماندن تا جاوااسکریپت‌ها و جدول‌ها لود شوند
+            page.goto("https://irenex.ir/TradeStatistics/Physical", timeout=60000, wait_until="networkidle")
+            page.wait_for_timeout(5000)
 
-    for ep in endpoints:
-        try:
-            res = requests.get(ep, headers=headers, timeout=15, verify=False)
-            if res.status_code == 200 and "application/json" in res.headers.get("Content-Type", ""):
-                data = res.json()
-                data_str = json.dumps(data, ensure_ascii=False)
-                if "سبز" in data_str or "برق" in data_str:
-                    # استخراج اولین قیمت منطقی مربوط به برق سبز (عددهای ریالی بالای ۱۰۰۰۰)
-                    matches = re.findall(r'"(?:Price|LastPrice|AveragePrice|Rate)":\s*(\d+)', data_str)
-                    for m in matches:
-                        if int(m) > 10000:
-                            extracted_price = int(m)
-                            break
-            if extracted_price:
-                break
-        except Exception:
-            continue
+            content = page.content()
+            browser.close()
 
-    if extracted_price:
-        print(f"SUCCESS: Fetched live market price: {extracted_price}")
-        fetch_status = "live_irenex"
-    else:
-        print("NOTICE: Live board not available (market closed or JS-only). Using standard industrial rate.")
-        extracted_price = 110000  # نرخ مبنای مصوب ماده ۱۶ برق صنایع (۱۱۰,۰۰۰ ریال)
+            # جستجوی تابلوی برق سبز در متن رندر شده
+            if "سبز" in content or "برق" in content:
+                # استخراج اعداد ۵ یا ۶ رقمی مربوط به نرخ ریالی
+                matches = re.findall(r'(\d{2,3}[,\.]\d{3})', content)
+                for m in matches:
+                    clean = int(m.replace(",", "").replace(".", ""))
+                    if 30000 <= clean <= 250000:
+                        extracted_price = clean
+                        fetch_status = "live_irenex"
+                        break
+    except Exception as e:
+        print(f"Browser automation failed: {e}")
+
+    if not extracted_price:
+        extracted_price = 110000  # نرخ پیش‌فرض پشتیبان
         fetch_status = "fallback"
 
     return extracted_price, fetch_status
 
 def update_price():
     live_price, fetch_status = fetch_live_green_price()
-
-    # هزینه احداث هر کیلووات نیروگاه خورشیدی (قابل ویرایش دستی بدون آپدیت اپلیکیشن)
-    setup_cost_per_kw = 250000000  # ۲۵ میلیون تومان بر حسب ریال
+    setup_cost_per_kw = 250000000
 
     data = {
         "market": "IRENEX_Green_Board_Industry",
